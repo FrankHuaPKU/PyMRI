@@ -432,6 +432,40 @@ def sqrt(field: 'ScalarField') -> 'ScalarField':
         raise TypeError("sqrt()仅支持ScalarField类型参数")
 
 
+# 计算散度, 梯度, 旋度
+# 使用FFT计算所有微分
+
+
+def grad(field: 'ScalarField') -> 'VectorField':
+    """计算标量场的梯度
+    
+    调用示例:
+        field = ScalarField(data, box)
+        grad_field = grad(field)
+    """
+    pass
+
+
+def div(field: 'VectorField') -> 'ScalarField':
+    """计算矢量场的散度
+    
+    调用示例:
+        field = VectorField(x, y, z, box)
+        div_field = div(field)
+    """
+    pass
+
+
+def curl(field: 'VectorField') -> 'VectorField':
+    """计算矢量场的旋度
+    
+    调用示例:
+        field = VectorField(x, y, z, box)
+        curl_field = curl(field)
+    """
+    pass
+
+
 
 def avg(fields: Union[List[ScalarField], List[VectorField]]) -> Union[ScalarField, VectorField]:
     """计算多个场的平均场
@@ -537,9 +571,14 @@ class Turbulence:
         Bs (List[VectorField])  : 磁场列表
         times (List[float])     : 对应的模拟时刻列表
         q (float)               : 剪切参量
-        EoS (str)               : 状态方程类型, 可选'isothermal'/'adiabatic'/'incompressible'
+        EoS (str)               : 状态方程, 可选'isothermal'/'adiabatic'/'incompressible'
 
-        wVs (List[VectorField]) : 加权速度场列表
+        nu (float)              : 粘度
+        eta (float)             : 磁耗散系数(电阻率)
+
+        Pm (float)              : 磁Prandtl数, Pm = nu / eta
+
+        wVs (List[VectorField]) : 密度加权速度场列表
         avgBs (List[Tuple[float, float, float]]) : 平均磁场
         KEs (List[float])       : 总动能
         MEs (List[float])       : 总磁能
@@ -553,7 +592,9 @@ class Turbulence:
         Bs   : List[VectorField],
         times: List[float],
         q    : float,
-        EoS  : str = 'isothermal'
+        EoS  : str,
+        nu   : float,
+        eta  : float
     ):
         """初始化湍流场"""
 
@@ -565,6 +606,9 @@ class Turbulence:
         self.q     = q     # 剪切参量
         self.EoS   = EoS   # 状态方程类型
         
+        self.nu    = nu    # 粘度
+        self.eta   = eta   # 磁耗散系数(电阻率)
+        self.Pm    = nu / eta # 磁Prandtl数
         # 验证输入数据的一致性
         n_snapshots = len(times)
         if not all(len(x) == n_snapshots for x in [rhos, Vs, Bs]):
@@ -617,7 +661,7 @@ class Turbulence:
         """
         return [ 0.5 * (B.norm**2).total  for B  in self.Bs  ]
     
-    
+
     @property
     def density_fluctuations(self) -> List[float]:
         """ 计算每个时刻的相对密度涨落 δρ/ρ 
@@ -670,13 +714,15 @@ def tests():
 
     # 测试Turbulence
     turbulence = Turbulence(
-        case='test',
-        rhos=[rho],
-        Vs=[V],
-        Bs=[B],
-        times=[0.0],
-        q=1.5,
-        EoS='isothermal'
+        case  = 'test',
+        rhos  = [rho],
+        Vs    = [V],
+        Bs    = [B],
+        times = [0.0],
+        q     = 1.5,
+        EoS   = 'isothermal',
+        nu    = 0.0001,
+        eta   = 0.00001
     )
 
     print((turbulence.wVs)[0].x)
@@ -685,6 +731,7 @@ def tests():
     print(turbulence.MEs)
     print(turbulence.density_fluctuations)
 
+    print(turbulence.Pm)
 
 
 if __name__ == "__main__":
