@@ -63,6 +63,8 @@ class MagneticSpectra:
         Bs (List[VectorField])  : 磁场列表, 从turbulence中提取
         times (List[float])     : 时间列表, 从turbulence中提取
         spectra (List[Spectrum]): 磁场能谱列表
+        gmean (Spectrum)        : 磁场能谱的几何平均值
+        gstd  (Spectrum)        : 磁场能谱的几何标准差
     """
     
     def __init__(self, turbulence: Turbulence):
@@ -76,16 +78,10 @@ class MagneticSpectra:
         # 从turbulence中提取数据
         self.Bs: List[VectorField] = turbulence.Bs
         self.times: List[float]    = turbulence.times
-        
-    @property
-    def spectra(self) -> List[Spectrum]:
-        """计算磁场能谱列表, 并存储为类属性
-        
-        返回:
-            List[Spectrum]: 磁场能谱列表
-        """
+
+
         def spectrum(B: VectorField) -> Spectrum:
-            """根据磁场计算能谱
+            """根据磁场计算能谱, 用于创建属性spectra
             
             参数:
                 B: VectorField类型的磁场
@@ -104,51 +100,22 @@ class MagneticSpectra:
             # 创建Spectrum对象
             return Spectrum(spc, [B.Lx, B.Ly, B.Lz])
         
-        # 计算所有时刻的能谱
-        spectra: List[Spectrum] = [spectrum(B) for B in self.Bs]
-            
-        return spectra
+        # 计算所有时刻的能谱, 并存储为类属性
+        self.spectra: List[Spectrum] = [spectrum(B) for B in self.Bs]
 
-    @property
-    def gmean(self) -> Spectrum:
-        """计算能谱的几何平均值
-        
-        返回:
-            Spectrum: 能谱
-        """
-        # 获取所有能谱
-        spectra: List[Spectrum] = self.spectra
 
-        stacked_data: np.ndarray = np.stack([spectrum.data for spectrum in spectra], axis=0)
-
-        # 计算几何平均值, 即对数空间中的算数平均值
+        # 计算几何平均值, 即对数空间中的算数平均值, 并存储为类属性
+        stacked_data: np.ndarray = np.stack([spectrum.data for spectrum in self.spectra], axis=0)
         gmean_data: np.ndarray = np.exp(np.mean(np.log(stacked_data), axis=0))
 
-        return Spectrum(gmean_data, [spectra[0].Lx, spectra[0].Ly, spectra[0].Lz])
+        self.gmean = Spectrum(gmean_data, [self.spectra[0].Lx, self.spectra[0].Ly, self.spectra[0].Lz])
 
-    @property
-    def gstd(self) -> Spectrum:
-        """计算能谱的几何标准差
-        
-        返回:
-            Spectrum: 能谱
-        """
-        # 获取所有能谱
-        spectra: List[Spectrum] = self.spectra
 
-        stacked_data: np.ndarray = np.stack([spectrum.data for spectrum in spectra], axis=0)
-
-        # 计算几何标准差, 即对数空间中的标准差
+        # 计算几何标准差, 即对数空间中的标准差, 并存储为类属性
+        stacked_data: np.ndarray = np.stack([spectrum.data for spectrum in self.spectra], axis=0)
         gstd_data: np.ndarray = np.exp(np.std(np.log(stacked_data), axis=0))
 
-        return Spectrum(gstd_data, [spectra[0].Lx, spectra[0].Ly, spectra[0].Lz])
-
-
-    # 为了控制噪声, 考虑在提取切片数据时, 提取目标轴附近范围内数据并取平均
-    # 对于z方向切片的2D切片图, 提取z=0平面附近几个（例如5个, 相当于覆盖0-2/H的波数空间）2D切片数据, 并取平均
-    # 对于z方向的1D切片图, 提取z轴附近几个（例如5*5个, 两方向各5个）1D切片数据, 并取平均
-
-
+        self.gstd = Spectrum(gstd_data, [self.spectra[0].Lx, self.spectra[0].Ly, self.spectra[0].Lz])
 
 
     def plot2d(self, output_dir: str = 'spectra', filename: str = 'avgMEspectra2D.pdf'):
