@@ -1,10 +1,14 @@
 import numpy as np
 import scipy.fft
 
+from scipy.stats import gmean
+
 from typing import List, Optional
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
+import matplotlib.cm as cm
+from matplotlib.colors import Normalize
 
 import os
 
@@ -56,21 +60,18 @@ class MagneticSpectra:
     
     属性:
         turbulence (Turbulence) : MRI湍流场对象
-        normalized (bool)       : 是否需要归一化, 默认为False
         Bs (List[VectorField])  : 磁场列表, 从turbulence中提取
         times (List[float])     : 时间列表, 从turbulence中提取
         spectra (List[Spectrum]): 磁场能谱列表
     """
     
-    def __init__(self, turbulence: Turbulence, normalized: bool = False):
+    def __init__(self, turbulence: Turbulence):
         """初始化磁场能谱对象
         
         参数:
             turbulence: MRI湍流场对象
-            normalized: 是否需要归一化, 默认为False
         """
         self.turbulence = turbulence
-        self.normalized = normalized
         
         # 从turbulence中提取数据
         self.Bs: List[VectorField] = turbulence.Bs
@@ -105,35 +106,50 @@ class MagneticSpectra:
         
         # 计算所有时刻的能谱
         spectra: List[Spectrum] = [spectrum(B) for B in self.Bs]
-        
-        # 如果需要归一化，则除以对应时刻的总磁能
-        if self.normalized:
-            MEs: List[float] = self.turbulence.MEs
-            spectra = [spc * (1.0 / ME) for spc, ME in zip(spectra, MEs)]
             
         return spectra
 
     @property
-    def avg(self) -> Spectrum:
-        """计算平均能谱
+    def gmean(self) -> Spectrum:
+        """计算能谱的几何平均值
         
         返回:
-            Spectrum: 平均能谱
+            Spectrum: 能谱
         """
         # 获取所有能谱
-        spectra = self.spectra
+        spectra: List[Spectrum] = self.spectra
+
+        stacked_data: np.ndarray = np.stack([spectrum.data for spectrum in spectra], axis=0)
+
+        # 计算几何平均值, 即对数空间中的算数平均值
+        gmean_data: np.ndarray = np.exp(np.mean(np.log(stacked_data), axis=0))
+
+        return Spectrum(gmean_data, [spectra[0].Lx, spectra[0].Ly, spectra[0].Lz])
+
+    @property
+    def gstd(self) -> Spectrum:
+        """计算能谱的几何标准差
         
-        if not spectra:
-            raise ValueError("没有可用的能谱数据")
-            
-        # 获取第一个能谱的box信息
-        box = [spectra[0].Lx, spectra[0].Ly, spectra[0].Lz]
-        
-        # 将所有能谱数据堆叠成三维数组，然后沿第一维取平均
-        data_stack: np.ndarray = np.stack([spc.data for spc in spectra])
-        avg_data: np.ndarray   = np.mean(data_stack, axis=0)
-        
-        return Spectrum(avg_data, box)
+        返回:
+            Spectrum: 能谱
+        """
+        # 获取所有能谱
+        spectra: List[Spectrum] = self.spectra
+
+        stacked_data: np.ndarray = np.stack([spectrum.data for spectrum in spectra], axis=0)
+
+        # 计算几何标准差, 即对数空间中的标准差
+        gstd_data: np.ndarray = np.exp(np.std(np.log(stacked_data), axis=0))
+
+        return Spectrum(gstd_data, [spectra[0].Lx, spectra[0].Ly, spectra[0].Lz])
+
+
+    # 为了控制噪声, 考虑在提取切片数据时, 提取目标轴附近范围内数据并取平均
+    # 对于z方向切片的2D切片图, 提取z=0平面附近几个（例如5个, 相当于覆盖0-2/H的波数空间）2D切片数据, 并取平均
+    # 对于z方向的1D切片图, 提取z轴附近几个（例如5*5个, 两方向各5个）1D切片数据, 并取平均
+
+
+
 
     def plot2d(self, output_dir: str = 'spectra', filename: str = 'avgMEspectra2D.pdf'):
         """绘制2D能谱
@@ -143,7 +159,7 @@ class MagneticSpectra:
             filename: 输出文件名，默认为'avgMEspectra2D.pdf'
         """
         # 获取平均能谱
-        spectrum: Spectrum = self.avg
+        spectrum: Spectrum = self.gmean
         
         # 使用fftshift将频率零点移到中心
         kx: np.ndarray = np.fft.fftshift(spectrum.kx)
@@ -152,9 +168,10 @@ class MagneticSpectra:
         Ek: np.ndarray = np.fft.fftshift(spectrum.data)
         
         # 提取三种能谱切片
-        Ek_xy: np.ndarray = Ek[:, :, spectrum.Nz // 2]    # E(kx, ky, 0)
-        Ek_xz: np.ndarray = Ek[:, spectrum.Ny // 2, :]    # E(kx, 0, kz)
-        Ek_zy: np.ndarray = Ek[spectrum.Nx // 2, :, :].T  # E(0, ky, kz)
+        # 提取平面附近几个（例如5个, 相当于覆盖0-2/H的波数空间）2D切片数据, 并取平均
+        Ek_xy: np.ndarray = np.mean(Ek[:, :, spectrum.Nz // 2 - 2: spectrum.Nz // 2 + 3], axis=2)
+        Ek_xz: np.ndarray = np.mean(Ek[:, spectrum.Ny // 2 - 2: spectrum.Ny // 2 + 3, :], axis=1)
+        Ek_zy: np.ndarray = np.mean(Ek[spectrum.Nx // 2 - 2: spectrum.Nx // 2 + 3, :, :], axis=0).T
         
         # 计算全局vmin和vmax
         all_Ek = np.concatenate([Ek_xy.flatten(), Ek_xz.flatten(), Ek_zy.flatten()])
@@ -219,4 +236,122 @@ class MagneticSpectra:
         plt.savefig(save_path, format='pdf', bbox_inches='tight')
         plt.close()
 
+    def plot1d(self, mode: str = 'slice', output_dir: str = 'spectra') -> None:
+        """绘制一维磁场能谱
 
+        参数:
+            mode (str): 绘图模式
+                - 'slice': 绘制三个方向的切片能谱，带标准差范围
+                - 'times': 绘制z方向能谱随时间的演化
+            output_dir (str): 输出目录，默认为'spectra'
+
+        输出文件:
+            - mode == 'slice': {output_dir}/avgMEspectraKx.pdf等三个文件
+            - mode == 'times': {output_dir}/timeMEspectraKz.pdf
+        """
+        # 创建输出目录
+        os.makedirs(output_dir, exist_ok=True)
+
+        if mode == 'slice':
+            # 获取能谱平均值与标准差
+            gmean: Spectrum = self.gmean
+            gstd : Spectrum = self.gstd
+
+            # 获取三个方向的能谱平均值与标准差, 并对另外两个方向的前三个数据点取平均
+            # x方向: 保留x维度，对y和z的前3个点取平均
+            gmean_x: np.ndarray = np.mean(np.mean(gmean.data[:, 0:3, 0:3], axis=2), axis=1)
+            gstd_x : np.ndarray = np.mean(np.mean( gstd.data[:, 0:3, 0:3], axis=2), axis=1)
+
+            # y方向: 保留y维度，对x和z的前3个点取平均
+            gmean_y: np.ndarray = np.mean(np.mean(gmean.data[0:3, :, 0:3], axis=2), axis=0)
+            gstd_y : np.ndarray = np.mean(np.mean( gstd.data[0:3, :, 0:3], axis=2), axis=0)
+
+            # z方向: 保留z维度，对x和y的前3个点取平均
+            gmean_z: np.ndarray = np.mean(np.mean(gmean.data[0:3, 0:3, :], axis=1), axis=0)
+            gstd_z : np.ndarray = np.mean(np.mean( gstd.data[0:3, 0:3, :], axis=1), axis=0)
+
+            # 对三个方向分别绘图
+            for direction, k, gmean, gstd in [
+                ('x', gmean.kx, gmean_x, gstd_x),
+                ('y', gmean.ky, gmean_y, gstd_y),
+                ('z', gmean.kz, gmean_z, gstd_z)
+            ]:
+                # 只取正半轴部分
+                N = k.size
+                k      : np.ndarray = k[1: N//2]
+                gmean  : np.ndarray = gmean[1: N//2]
+                gstd   : np.ndarray = gstd[1: N//2]
+
+                # 创建新图
+                plt.figure(figsize=(7, 5))
+
+                # 绘制平均值曲线和标准差范围
+                plt.loglog(k, gmean, 'k-', lw=2)
+                plt.fill_between(k, gmean / gstd, gmean * gstd, color='gray', alpha=0.3, linewidth=0)
+
+                # 设置标签和标题
+                plt.xlabel(rf'$k_{direction}$', fontsize=12)
+                plt.ylabel(rf'$E(k_{direction})$', fontsize=12)
+                plt.title('Magnetic Energy Spectrum', fontsize=14)
+
+                # 添加网格
+                plt.grid(True, which='both' , ls='--', lw=0.5, axis='x')  # x轴显示主次刻度
+                plt.grid(True, which='major', ls='--', lw=0.5, axis='y')  # y轴只显示主刻度
+
+                # 保存图像
+                filename = f'avgMEspectraK{direction}.pdf'
+                plt.savefig(os.path.join(output_dir, filename), format='pdf', bbox_inches='tight')
+                plt.close()
+
+        elif mode == 'times':
+            # 获取所有时刻的能谱
+            spectra: List[Spectrum] = self.spectra
+            times  : List[float]    = self.turbulence.times
+
+            # 设置颜色映射
+            norm = Normalize(vmin=min(times), vmax=max(times))
+            cmap = cm.get_cmap('jet')
+
+            # 创建新图
+            plt.figure(figsize=(10, 7))
+
+            # 对每个时刻绘制能谱
+            for spectrum, time in zip(spectra, times):
+                # 获取z方向能谱（对xy方向积分）
+                kz = spectrum.kz[1:spectrum.kz.size//2]  # 只取正半轴
+
+                Ek_z = np.sum(np.sum(spectrum.data, axis=1), axis=0) * spectrum.dkx * spectrum.dky
+                Ek_z = Ek_z[1:spectrum.kz.size//2] # 只取正半轴
+
+                # 获取对应时间的颜色
+                color = cmap(norm(time))
+
+                # 绘制能谱
+                plt.loglog(kz, Ek_z, color=color, linewidth=1)
+
+            # 添加颜色条
+            sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array([])
+            cbar = plt.colorbar(sm, pad=0.02)
+            cbar.set_label('Time', fontsize=12)
+
+            # 设置标签和标题
+            plt.xlabel(r'$k_z$', fontsize=14)
+            plt.ylabel(r'$E(k_z)$', fontsize=14)
+            plt.title('Time Evolution of Magnetic Energy Spectrum', fontsize=14)
+
+            # 添加网格
+            plt.grid(True, which='both' , ls='--', lw=0.5, axis='x')  # x轴显示主次刻度
+            plt.grid(True, which='major', ls='--', lw=0.5, axis='y')  # y轴只显示主刻度
+
+            # 保存图像
+            filename = 'timeMEspectraKz.pdf'
+            plt.savefig(os.path.join(output_dir, filename), format='pdf', bbox_inches='tight')
+            plt.close()
+
+    def plot(self) -> None:
+        """绘制能谱: 打包实现所有功能
+        """
+        self.plot2d()
+        self.plot1d(mode='slice')
+        self.plot1d(mode='times')

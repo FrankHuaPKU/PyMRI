@@ -42,10 +42,10 @@ def test_MagneticSpectra():
     turbulence = preprocess.output2turbulence(outn, t1, t2)
         
     # 计算磁场能谱
-    spc = MagneticSpectra(turbulence, normalized=True)
+    spc = MagneticSpectra(turbulence)
     
-    # 绘制2D能谱
-    spc.plot2d()
+    # 绘制能谱
+    spc.plot()
 
 
 if __name__ == "__main__":
