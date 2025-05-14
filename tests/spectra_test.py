@@ -27,8 +27,8 @@ def test_spectrum():
     print(spc.data)
 
 
-def test_MagneticSpectra():
-    """测试MagneticSpectra类
+def test_EnergySpectra():
+    """测试EnergySpectra类
     
     在case目录中调用, 调用命令:
     srun -N 1 -n 1 -J hyy python ../../../PyMRI/tests/spectra_test.py
@@ -42,11 +42,11 @@ def test_MagneticSpectra():
     turbulence = preprocess.output2turbulence(outn, t1, t2)
         
     # 计算磁场能谱
-    spc = MagneticSpectra(turbulence)
+    spc = EnergySpectra(turbulence)
     
     # 绘制能谱
     spc.plot()
 
 
 if __name__ == "__main__":
-    test_MagneticSpectra()
+    test_EnergySpectra()
