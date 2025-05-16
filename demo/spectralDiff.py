@@ -88,8 +88,8 @@ def smooth(x):
 
 def multiscale(x):
     return np.sin(2*np.pi*x) + 0.8 * np.cos(4*np.pi*x + 0.1) + 0.3 * np.sin(16*np.pi*x - 0.2) \
-        + 0.07 * np.cos(64*np.pi*x + 0.3) + 0.03 * np.exp(-(128*np.pi*x + 0.9)**2) \
-        + 0.01 * np.cos(256*np.pi*x - 0.1) + 0.007 * np.exp(-(512*np.pi*x - 0.2)**2)
+        + 0.07 * np.cos(64*np.pi*x + 0.3) + 0.03 * np.exp(np.sin(128*np.pi*x + 0.9)) \
+        + 0.01 * np.cos(256*np.pi*x - 0.1) + 0.007 * np.sin(512*np.pi*x - 0.2)
 
 def nonperiodic(x):
     return (x+0.25)**2 * np.exp(-(x+0.25)**2)
@@ -107,7 +107,7 @@ def get_analytical_derivative(func_name):
     function_dict = {
         'smooth'     : cos(2*pi*x) * exp(sin(2*pi*x)),
         'multiscale' : sin(2*pi*x) + 0.8*cos(4*pi*x + 0.1) + 0.3*sin(16*pi*x - 0.2) + 0.07*cos(64*pi*x + 0.3) \
-                 + 0.03*exp(-(128*pi*x + 0.9)**2) + 0.01*cos(256*pi*x - 0.1) + 0.007*exp(-(512*pi*x - 0.2)**2),
+                 + 0.03*exp(sin(128*pi*x + 0.9)) + 0.01*cos(256*pi*x - 0.1) + 0.007*sin(512*pi*x - 0.2),
         'nonperiodic': (x+0.25)**2 * exp(-(x+0.25)**2)
     }
     
@@ -255,7 +255,7 @@ def main():
         print(f"正在计算测试函数: {func_name}")
         
         # 绘制导数比较图
-        plot_comparison(func, func_name, N=256)
+        plot_comparison(func, func_name, N=1024)
         
         # 进行收敛性研究
         convergence_study(func, func_name, N_values)
