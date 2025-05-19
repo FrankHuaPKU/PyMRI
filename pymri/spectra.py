@@ -71,11 +71,12 @@ class EnergySpectra:
         KEgstd  (Spectrum)        : 动能能谱的几何标准差
     """
     
-    def __init__(self, turbulence: Turbulence):
+    def __init__(self, turbulence: Turbulence, normalize: bool = True):
         """初始化能谱对象
         
         参数:
             turbulence: MRI湍流场对象
+            normalize: 是否归一化能谱, 默认True
         """
         self.turbulence = turbulence
         
@@ -83,6 +84,10 @@ class EnergySpectra:
         self.Bs : List[VectorField] = turbulence.Bs
         self.wVs: List[VectorField] = turbulence.wVs
         self.times: List[float]     = turbulence.times
+
+        # 提取总动能与总磁能
+        self.KEs: List[float] = turbulence.KEs
+        self.MEs: List[float] = turbulence.MEs
 
 
         def get_spectrum(field: VectorField) -> Spectrum:
@@ -107,6 +112,11 @@ class EnergySpectra:
 
         self.MEspectra: List[Spectrum] = [get_spectrum(B)  for B  in self.Bs]
         self.KEspectra: List[Spectrum] = [get_spectrum(wV) for wV in self.wVs]
+
+        # 归一化能谱
+        if normalize:
+            self.MEspectra = [spc / ME for spc, ME in zip(self.MEspectra, self.MEs)]
+            self.KEspectra = [spc / KE for spc, KE in zip(self.KEspectra, self.KEs)]
 
 
         def get_gmean_gstd(spectra: List[Spectrum]) -> Tuple[Spectrum, Spectrum]:
