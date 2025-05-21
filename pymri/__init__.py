@@ -5,6 +5,7 @@ __version__ = "0.1.0"
 from .turbulence import ScalarField, VectorField, Turbulence
 from .spectra import Spectrum, EnergySpectra
 from .correlation import CorrFunc, Correlation
+from .slice import plot2dslice
 
 __all__ = [
     "ScalarField",
@@ -13,5 +14,6 @@ __all__ = [
     "Spectrum",
     "EnergySpectra",
     "CorrFunc",
-    "Correlation"
+    "Correlation",
+    "plot2dslice"
 ]
