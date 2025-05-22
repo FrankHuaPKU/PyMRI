@@ -21,12 +21,10 @@ def read_time_data(filename):
     return np.array(times)
 
 
-def fornberg_weights(x, x0, M):
+def get_fornberg_weights(times, t0, M):
     """
-    Compute finite difference weights for derivatives at x0,
-    using Fornberg's recursive algorithm.
-
-    符号尽可能参考Fornberg 1988论文的实现
+    Compute finite difference weights for derivatives at t0,
+    using Fornberg's recursive algorithm (Fornberg 1988)
 
     m: 导数阶数, 取值范围 0 ~ M
     n: 用于计算导数的数据点数量, 取值范围 0 ~ N (N + 1为所有数据点数量)
@@ -35,12 +33,9 @@ def fornberg_weights(x, x0, M):
 
     Parameters:
     ----------
-    x : array_like
-        Array of n+1 grid points (not necessarily uniformly spaced).
-    x0 : float
-        The point at which the derivative is to be approximated.
-    M : int
-        Maximum order of derivative required.
+    times : array_like, Array of n+1 time points (not necessarily uniformly spaced).
+    t0    : float, The point at which the derivative is to be approximated.
+    M     : int, Maximum order of derivative required.
 
     Returns:
     -------
@@ -48,7 +43,7 @@ def fornberg_weights(x, x0, M):
         Weights c[i, m] such that:
         f^(m)(x0) ≈ sum_i=0^n c[m, n, i] * f(x[i])
     """
-    N = len(x) - 1
+    N = len(times) - 1
     c = np.zeros((M + 1, N + 1, N + 1))
     c[0, 0, 0] = 1.0
     c1 = 1.0
@@ -56,7 +51,7 @@ def fornberg_weights(x, x0, M):
     for n in range(1, N + 1):
         c2 = 1.0
         for i in range(n):
-            c3 = x[n] - x[i]
+            c3 = times[n] - times[i]
             c2 *= c3
 
             if n <= M: 
@@ -64,10 +59,10 @@ def fornberg_weights(x, x0, M):
 
             for m in range(0, min(n, M) + 1):
                 for j in range(n):
-                    c[m, n, i] = ((x[n] - x0) * c[m, n - 1, i] - m * c[m - 1, n - 1, i]) / c3
+                    c[m, n, i] = ((times[n] - t0) * c[m, n - 1, i] - m * c[m - 1, n - 1, i]) / c3
 
         for m in range(0, min(n, M) + 1):
-            c[m, n, n] = c1 / c2 * (m * c[m - 1, n - 1, n - 1] - (x[n - 1] - x0) * c[m, n - 1, n - 1])
+            c[m, n, n] = c1 / c2 * (m * c[m - 1, n - 1, n - 1] - (times[n - 1] - t0) * c[m, n - 1, n - 1])
 
         c1 = c2
 
@@ -102,11 +97,11 @@ def fornberg(f, times, t0, N):
             start_idx = len(times) - (N + 1)
     
     # 提取时间点和函数值
-    x = times[start_idx:end_idx]
-    y = f(x)
+    times = times[start_idx:end_idx]
+    y = f(times)
     
     # 计算权重（只需要一阶导数，所以M=1）
-    weights = fornberg_weights(x, t0, 1)
+    weights = get_fornberg_weights(times, t0, 1)
     
     # 计算导数（使用权重的第二列，即一阶导数的权重）
     derivative = np.sum(weights[1, N, :] * y)
@@ -289,3 +284,14 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+    a = [1, 2]
+    b = a
+    a += [3]       # 原地修改（等于 b 也变了）
+    print(b)       # [1, 2, 3]
+
+    a = [1, 2]
+    b = a
+    a = a + [3]    # 重新赋值
+    print(b)       # [1, 2]
