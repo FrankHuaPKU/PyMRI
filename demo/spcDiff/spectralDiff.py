@@ -1,10 +1,14 @@
 import numpy as np
 import scipy.fft
 import matplotlib.pyplot as plt
-from sympy import symbols, diff, lambdify, cos, exp, pi, sin
+from sympy import symbols, diff, lambdify, cos, exp, pi, sin, fourier_series, integrate, I, S
 import os
 
-def spectralDiff(f, N, FP):
+# 扩展至任意大小的区间 [-L/2, L/2]
+# 全局变量
+L = 2.0
+
+def spectralDiff(f, N, FP, dealiasing = 0.5):
     """谱微分算法
     
     参数:
@@ -24,12 +28,12 @@ def spectralDiff(f, N, FP):
     else:
         raise ValueError(f"未知精度: {FP}")
     
-    # 在[-0.5, 0.5]区间上均匀采样
-    x = np.linspace(-0.5, 0.5, N, endpoint=False, dtype=dtype)
+    # 在[-L / 2, L / 2]区间上均匀采样
+    x = np.linspace(-L / 2, L / 2, N, endpoint=False, dtype=dtype)
     f_vals = f(x).astype(dtype)
     
     # 计算波数，注意规范化
-    k = (2 * np.pi * np.fft.fftfreq(N, d=1.0/N)).astype(dtype)
+    k = (2 * np.pi * np.fft.fftfreq(N, d = L / N)).astype(dtype)
     
     # 傅里叶变换
     f_hat = np.fft.fft(f_vals)
@@ -38,9 +42,9 @@ def spectralDiff(f, N, FP):
     fprime_hat = (1j * k * f_hat).astype(np.complex64 if FP == 'FP32' else np.complex128)
 
     # 计算截断位置
-    # cutoff = int((1 - dealiasing) * N/2)
-    # 去除中间的 dealiasing*N 个模式
-    # fprime_hat[cutoff:-cutoff] = 0
+    cutoff = int((1 - dealiasing) * N/2)
+    # 去除中间的 dealiasing * N 个模式
+    fprime_hat[cutoff:-cutoff] = 0
     
     # 逆傅里叶变换，取实部
     fprime = np.real(np.fft.ifft(fprime_hat)).astype(dtype)
@@ -68,7 +72,7 @@ def centralDiff(f, N, FP):
         raise ValueError(f"未知精度: {FP}")
     
     # 使用与谱方法相同的采样点
-    x = np.linspace(-0.5, 0.5, N, endpoint=False, dtype=dtype)
+    x = np.linspace(-L/2, L/2, N, endpoint=False, dtype=dtype)
     dx = x[1] - x[0]
     f_vals = f(x).astype(dtype)
     
@@ -77,7 +81,7 @@ def centralDiff(f, N, FP):
     fprime[1:-1] = (f_vals[2:] - f_vals[:-2]) / (2 * dx)
     
     # 周期边界条件
-    fprime[0] = (f_vals[1] - f_vals[-1]) / (2 * dx)
+    fprime[0]  = (f_vals[1] - f_vals[-1]) / (2 * dx)
     fprime[-1] = (f_vals[0] - f_vals[-2]) / (2 * dx)
     
     return x, fprime
@@ -93,6 +97,98 @@ def multiscale(x):
 
 def nonperiodic(x):
     return (x+0.25)**2 * np.exp(-(x+0.25)**2)
+
+def turbulence(x):
+    # 利用解析函数近似模拟湍流的多尺度能谱
+    pass
+
+def getSpectrum(f, N, FP):
+    """计算FFT能谱
+
+    利用 scipy.fft.fft 计算能谱
+    
+    参数:
+        f: 函数对象
+        N: 采样点数
+        FP: 浮点数精度 ('FP32' 或 'FP64')
+    
+    返回:
+        k: 波数数组
+        spectrum: 能谱数组
+    """
+    # 设置数据类型
+    if FP == 'FP32':
+        dtype = np.float32
+    elif FP == 'FP64':
+        dtype = np.float64
+    else:
+        raise ValueError(f"未知精度: {FP}")
+    
+    # 在[-L/2, L/2]区间上均匀采样
+    x = np.linspace(-L/2, L/2, N, endpoint=False, dtype=dtype)
+    f_vals = f(x).astype(dtype)
+    
+    # 计算波数，注意规范化
+    k = np.fft.fftfreq(N, d = L / N).astype(dtype)
+    
+    # 傅里叶变换
+    f_hat = np.fft.fft(f_vals)
+    
+    # 计算能谱 |f_hat(k)|^2
+    spectrum = np.abs(f_hat)**2
+    
+    # 对能谱进行规范化
+    spectrum = spectrum / N
+    
+    return k, spectrum
+
+
+def plotSpectrum(func, N, save_dir='outputs'):
+    """绘制函数的FFT能谱
+    
+    参数:
+        func: 函数对象
+        N: 采样点数
+        save_dir: 保存目录
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    
+    # 设置全局字体大小
+    plt.rcParams.update({
+        'font.size': 14,
+        'axes.titlesize': 16,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'legend.fontsize': 12
+    })
+    
+    # 计算FFT能谱
+    k_fft64, spectrum_fft64 = getSpectrum(func, N, 'FP64')
+    k_fft32, spectrum_fft32 = getSpectrum(func, N, 'FP32')
+    
+    # 绘制能谱图
+    plt.figure(figsize=(12, 6))
+    
+    # 去掉k=0点，只保留正频率部分
+    mask64 = (k_fft64 > 0)
+    mask32 = (k_fft32 > 0)
+    
+    # 绘制FFT能谱（双对数坐标）
+    plt.loglog(abs(k_fft32[mask32]), spectrum_fft32[mask32], 'b--', label='FFT (FP32)', linewidth=2, alpha=0.7)
+    plt.loglog(abs(k_fft64[mask64]), spectrum_fft64[mask64], 'r-' , label='FFT (FP64)', linewidth=2, alpha=0.7)
+    
+    
+    plt.title(f'Spectrum - {func.__name__.capitalize()} Function', pad=15)
+    plt.xlabel('Wave Number k', labelpad=10)
+    plt.ylabel('E(k)', labelpad=10)
+    plt.legend(frameon=True, edgecolor='black')
+    plt.grid(True, which="both", ls="-", alpha=0.2)
+    
+    # 保存图像
+    plt.savefig(os.path.join(save_dir, f'{func.__name__}_spectrum.pdf'), bbox_inches='tight')
+    plt.close()
+
 
 def get_analytical_derivative(func_name):
     """获取解析导数
@@ -148,8 +244,8 @@ def plot_comparison(func, func_name, N, save_dir='outputs'):
     })
     
     # 计算数值导数
-    x_spec64, fprime_spec64 = spectralDiff(func, N, 'FP64')
-    x_spec32, fprime_spec32 = spectralDiff(func, N, 'FP32')
+    x_spec64, fprime_spec64 = spectralDiff(func, N, 'FP64', dealiasing = 0.0)
+    x_spec32, fprime_spec32 = spectralDiff(func, N, 'FP32', dealiasing = 0.0)
     _, fprime_cd64 = centralDiff(func, N, 'FP64')
     _, fprime_cd32 = centralDiff(func, N, 'FP32')
     
@@ -193,6 +289,7 @@ def convergence_study(func, func_name, N_values, save_dir='outputs'):
     })
     
     errors_spec64 = []
+    errors_spec64_dealiased = []
     errors_spec32 = []
     errors_cd64 = []
     errors_cd32 = []
@@ -200,17 +297,20 @@ def convergence_study(func, func_name, N_values, save_dir='outputs'):
     fprime_exact = get_analytical_derivative(func_name)
     
     for N in N_values:
-        x_spec64, fprime_spec64 = spectralDiff(func, N, 'FP64')
-        x_spec32, fprime_spec32 = spectralDiff(func, N, 'FP32')
+        x_spec64, fprime_spec64 = spectralDiff(func, N, 'FP64', dealiasing = 0.0)
+        x_spec64, fprime_spec64_dealiased = spectralDiff(func, N, 'FP64', dealiasing = 0.33)
+        x_spec32, fprime_spec32 = spectralDiff(func, N, 'FP32', dealiasing = 0.0)
         _, fprime_cd64 = centralDiff(func, N, 'FP64')
         _, fprime_cd32 = centralDiff(func, N, 'FP32')
         
         err_spec64 = compute_error(fprime_spec64, fprime_exact, x_spec64, func_name)
+        err_spec64_dealiased = compute_error(fprime_spec64_dealiased, fprime_exact, x_spec64, func_name)
         err_spec32 = compute_error(fprime_spec32, fprime_exact, x_spec32, func_name)
         err_cd64 = compute_error(fprime_cd64, fprime_exact, x_spec64, func_name)
         err_cd32 = compute_error(fprime_cd32, fprime_exact, x_spec32, func_name)
         
         errors_spec64.append(err_spec64)
+        errors_spec64_dealiased.append(err_spec64_dealiased)
         errors_spec32.append(err_spec32)
         errors_cd64.append(err_cd64)
         errors_cd32.append(err_cd32)
@@ -219,6 +319,7 @@ def convergence_study(func, func_name, N_values, save_dir='outputs'):
     # 绘制收敛性图
     plt.figure(figsize=(12, 6))
     plt.loglog(N_values, errors_spec64, 'rs-', label='Spectral (FP64)'    , linewidth=2, markersize=4)
+    plt.loglog(N_values, errors_spec64_dealiased, 'ks--', label='Spectral (FP64) Dealiased', linewidth=2, markersize=4)
     plt.loglog(N_values, errors_spec32, 'rs--' , label='Spectral (FP32)'    , linewidth=2, markersize=4)
     plt.loglog(N_values, errors_cd64  , 'bs-', label='Central Diff (FP64)', linewidth=2, markersize=4)
     plt.loglog(N_values, errors_cd32  , 'bs--' , label='Central Diff (FP32)', linewidth=2, markersize=4)
@@ -254,8 +355,11 @@ def main():
     for func_name, func in test_functions.items():
         print(f"正在计算测试函数: {func_name}")
         
+        # 绘制能谱图
+        plotSpectrum(func, N = 1024)
+        
         # 绘制导数比较图
-        plot_comparison(func, func_name, N=1024)
+        plot_comparison(func, func_name, N = 1024)
         
         # 进行收敛性研究
         convergence_study(func, func_name, N_values)
