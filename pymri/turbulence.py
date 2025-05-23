@@ -129,12 +129,17 @@ class ScalarField:
         
         支持运算:
         1. 与浮点数或ScalarField相乘
-        2. 与VectorField相乘时, 委托给VectorField的__rmul__方法处理
+        2. 与三元组(常矢量)相乘
+        3. 与VectorField相乘时, 委托给VectorField的__rmul__方法处理
 
         调用示例:
             field1 = ScalarField(data1, box)
             field2 = ScalarField(data2, box)
-            field = field1 * field2
+            field  = field1 * field2
+
+            field1 = ScalarField(data1, box)
+            e_y = (0, 1, 0) # 常矢量, 表示y方向的单位矢量
+            field  = field1 * e_y # 返回 VectorField(0, field1, 0)
         """
         if isinstance(other, (float, int)):
             return type(self)(self.data * other, [self.Lx, self.Ly, self.Lz])
@@ -143,6 +148,13 @@ class ScalarField:
         elif isinstance(other, VectorField):
             # 委托给VectorField处理
             return other.__rmul__(self)
+        elif isinstance(other, tuple) and len(other) == 3:
+            return VectorField(
+                self.data * other[0],
+                self.data * other[1],
+                self.data * other[2],
+                [self.Lx, self.Ly, self.Lz]
+            )
         else:
             raise TypeError("ScalarField只能与浮点数、ScalarField或VectorField相乘")
             
@@ -417,6 +429,19 @@ class VectorField:
         else:
             raise TypeError("叉乘运算仅支持两个VectorField相乘")
 
+    def __rpow__(self, other):
+        """常矢量叉乘运算: 
+        tuple ** VectorField -> VectorField
+        """
+        if isinstance(other, tuple) and len(other) == 3:
+            return VectorField(
+                self.y * other[2] - self.z * other[1],
+                self.z * other[0] - self.x * other[2],
+                self.x * other[1] - self.y * other[0],
+                [self.Lx, self.Ly, self.Lz]
+            )
+        else:
+            raise TypeError("常矢量叉乘运算仅支持三元组类型参数")
 
 
 
@@ -437,6 +462,20 @@ def sqrt(field: 'ScalarField') -> 'ScalarField':
 
 # 计算散度, 梯度, 旋度
 # 使用FFT计算所有微分
+
+# 首先计算偏导数
+
+def partial_x(scalarfield: ScalarField) -> ScalarField:
+    # 利用 FFT 计算 x 方向偏导数
+    pass
+
+def partial_y(scalarfield: ScalarField) -> ScalarField:
+    # 利用 FFT 计算 y 方向偏导数
+    pass
+
+def partial_z(scalarfield: ScalarField) -> ScalarField:
+    # 利用 FFT 计算 z 方向偏导数
+    pass
 
 
 def grad(field: 'ScalarField') -> 'VectorField':
@@ -467,6 +506,16 @@ def curl(field: 'VectorField') -> 'VectorField':
         curl_field = curl(field)
     """
     pass
+
+def laplacian(field: Union['ScalarField', 'VectorField']) -> Union['ScalarField', 'VectorField']:
+    """计算标量场或矢量场的拉普拉斯算子
+    
+    调用示例:
+        field = ScalarField(data, box)
+        laplacian_field = laplacian(field)
+    """
+    pass
+
 
 
 
@@ -573,6 +622,8 @@ class Turbulence:
         Vs (List[VectorField])  : 速度场列表
         Bs (List[VectorField])  : 磁场列表
         times (List[float])     : 对应的模拟时刻列表
+
+        Omega (float)           : 旋转角速度
         q (float)               : 剪切参量
         EoS (str)               : 状态方程, 可选'isothermal'/'adiabatic'/'incompressible'
 
@@ -594,6 +645,7 @@ class Turbulence:
         Vs   : List[VectorField],
         Bs   : List[VectorField],
         times: List[float],
+        Omega: float,
         q    : float,
         EoS  : str,
         nu   : float,
@@ -606,6 +658,7 @@ class Turbulence:
         self.Vs    = Vs    # 速度场列表
         self.Bs    = Bs    # 磁场列表
         self.times = times # 对应的模拟时刻列表
+        self.Omega = Omega # 旋转角速度
         self.q     = q     # 剪切参量
         self.EoS   = EoS   # 状态方程类型
         
@@ -722,6 +775,7 @@ def tests():
         Vs    = [V],
         Bs    = [B],
         times = [0.0],
+        Omega = 1.0,
         q     = 1.5,
         EoS   = 'isothermal',
         nu    = 0.0001,
@@ -735,6 +789,7 @@ def tests():
     print(turbulence.density_fluctuations)
 
     print(turbulence.Pm)
+    print(turbulence.Omega) 
 
 
 if __name__ == "__main__":
