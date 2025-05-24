@@ -445,7 +445,7 @@ class VectorField:
 
 
 
-def sqrt(field: 'ScalarField') -> 'ScalarField':
+def sqrt(field: ScalarField) -> ScalarField:
     """计算标量场的平方根
     
     调用示例:
@@ -465,54 +465,54 @@ def sqrt(field: 'ScalarField') -> 'ScalarField':
 
 # 首先计算偏导数
 
-def partial_x(scalarfield: ScalarField) -> ScalarField:
+def Dx(field: Union[ScalarField, VectorField]) -> Union[ScalarField, VectorField]:
     # 利用 FFT 计算 x 方向偏导数
     pass
 
-def partial_y(scalarfield: ScalarField) -> ScalarField:
+def Dy(field: Union[ScalarField, VectorField]) -> Union[ScalarField, VectorField]:
     # 利用 FFT 计算 y 方向偏导数
     pass
 
-def partial_z(scalarfield: ScalarField) -> ScalarField:
+def Dz(field: Union[ScalarField, VectorField]) -> Union[ScalarField, VectorField]:
     # 利用 FFT 计算 z 方向偏导数
     pass
 
 
-def grad(field: 'ScalarField') -> 'VectorField':
+def grad(field: ScalarField) -> VectorField:
     """计算标量场的梯度
     
     调用示例:
         field = ScalarField(data, box)
-        grad_field = grad(field)
+        grad_field: VectorField = grad(field)
     """
     pass
 
 
-def div(field: 'VectorField') -> 'ScalarField':
+def div(field: VectorField) -> ScalarField:
     """计算矢量场的散度
     
     调用示例:
         field = VectorField(x, y, z, box)
-        div_field = div(field)
+        div_field: ScalarField = div(field)
     """
     pass
 
 
-def curl(field: 'VectorField') -> 'VectorField':
+def curl(field: VectorField) -> VectorField:
     """计算矢量场的旋度
     
     调用示例:
         field = VectorField(x, y, z, box)
-        curl_field = curl(field)
+        curl_field: VectorField = curl(field)
     """
     pass
 
-def laplacian(field: Union['ScalarField', 'VectorField']) -> Union['ScalarField', 'VectorField']:
+def laplacian(field: Union[ScalarField, VectorField]) -> Union[ScalarField, VectorField]:
     """计算标量场或矢量场的拉普拉斯算子
     
     调用示例:
         field = ScalarField(data, box)
-        laplacian_field = laplacian(field)
+        laplacian_field: ScalarField = laplacian(field)
     """
     pass
 
@@ -619,11 +619,12 @@ class Turbulence:
     属性:
         case (str)              : 湍流对应的case名
         rhos (List[ScalarField]): 密度场列表
-        Vs (List[VectorField])  : 速度场列表
-        Bs (List[VectorField])  : 磁场列表
+        ps   (List[ScalarField]): 压强场列表
+        Vs   (List[VectorField]): 速度场列表
+        Bs   (List[VectorField]): 磁场列表
         times (List[float])     : 对应的模拟时刻列表
 
-        Omega (float)           : 旋转角速度
+        Omega (float)           : 旋转角速度, 单位: rad/s
         q (float)               : 剪切参量
         EoS (str)               : 状态方程, 可选'isothermal'/'adiabatic'/'incompressible'
 
@@ -641,26 +642,38 @@ class Turbulence:
     def __init__(
         self,
         case : str,
-        rhos : List[ScalarField],
+        rhos : Optional[List[ScalarField]],
+        ps   : Optional[List[ScalarField]],
         Vs   : List[VectorField],
         Bs   : List[VectorField],
         times: List[float],
         Omega: float,
         q    : float,
         EoS  : str,
+        Cs   : Optional[float],
         nu   : float,
         eta  : float
     ):
         """初始化湍流场"""
 
         self.case  = case  # case名
-        self.rhos  = rhos  # 密度场列表
+
         self.Vs    = Vs    # 速度场列表
         self.Bs    = Bs    # 磁场列表
         self.times = times # 对应的模拟时刻列表
         self.Omega = Omega # 旋转角速度
         self.q     = q     # 剪切参量
         self.EoS   = EoS   # 状态方程类型
+
+        # 根据状态方程分类讨论
+        if EoS == 'isothermal':
+            self.rhos  = rhos  # 密度场列表
+            self.ps    = [Cs**2 * rho for rho in rhos]
+        elif EoS == 'incompressible':
+            self.rhos  = rhos  # 密度场列表 TODO: 不可压code中如何处理密度场数据
+            self.ps    = ps
+        else:
+            raise ValueError("不支持的状态方程类型")
         
         self.nu    = nu    # 粘度
         self.eta   = eta   # 磁耗散系数(电阻率)
